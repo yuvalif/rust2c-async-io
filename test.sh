@@ -2,9 +2,10 @@
 
 for i in {1..10}; do
     filename="random_file_${i}.bin"
+    filesize=$((64 + RANDOM % 65))
     if [ ! -f "$filename" ]; then
         echo "creating $filename..."
-        dd if=/dev/urandom of="$filename" bs=1M count=128
+        dd if=/dev/urandom of="$filename" bs=1M count="$filesize"
     else
         echo "$filename already exists, skipping..."
     fi
