@@ -16,3 +16,4 @@ LD_LIBRARY_PATH=./target/release ./example_c random_file_*.bin
 LD_LIBRARY_PATH=./target/release ./example_cpp random_file_*.bin
 LD_LIBRARY_PATH=./target/release ./example_async random_file_*.bin
 LD_LIBRARY_PATH=./target/release ./example_boost_coro random_file_*.bin
+./example_file_reader random_file_*.bin

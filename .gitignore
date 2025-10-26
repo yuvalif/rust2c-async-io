@@ -1,3 +1,7 @@
 target
-example_*
 random_file*
+example_async
+example_boost_coro
+example_c
+example_cpp
+example_file_reader
