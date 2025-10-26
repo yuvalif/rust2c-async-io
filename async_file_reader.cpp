@@ -7,11 +7,12 @@ constexpr size_t CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
 
 namespace asio = boost::asio;
 
-void read_file_chunks(asio::yield_context yield, asio::io_context& io_context, const std::string& filename) {
+void read_file_chunks(asio::yield_context yield, asio::io_context& io_context, const std::string& filename, std::function<void(const char*, size_t, size_t, size_t)> chunk_callback) {
   try {
     asio::random_access_file file(io_context, filename, asio::file_base::read_only);
     std::vector<char> buffer(CHUNK_SIZE);
     size_t offset = 0;
+    size_t chunk_number = 0;
     boost::system::error_code ec;
 
     while (true) {
@@ -27,6 +28,10 @@ void read_file_chunks(asio::yield_context yield, asio::io_context& io_context, c
       if (bytes_read == 0) {
         break;
       }
+      
+      // Call the callback with buffer data, chunk number, offset, and bytes read
+      chunk_callback(buffer.data(), chunk_number++, offset, bytes_read);
+      
       offset += bytes_read;
       if (bytes_read < CHUNK_SIZE) {
         break;

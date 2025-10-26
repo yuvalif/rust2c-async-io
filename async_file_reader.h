@@ -5,4 +5,6 @@
 #include <string>
 
 
-void read_file_chunks(boost::asio::yield_context yield, boost::asio::io_context& io_context, const std::string& filename);
+#include <functional>
+
+void read_file_chunks(boost::asio::yield_context yield, boost::asio::io_context& io_context, const std::string& filename, std::function<void(const char*, size_t, size_t, size_t)> chunk_callback);

@@ -30,7 +30,7 @@ $(BOOST_TARGET): example_boost_coro.cpp $(RUST_LIB)
 	$(CXX) $(BOOST_FLAGS) -o $(BOOST_TARGET) example_boost_coro.cpp -L./target/release -lasync_file_hasher
 
 $(FILE_READER_TARGET): example_file_reader.cpp async_file_reader.cpp async_file_reader.h
-	$(CXX) -DBOOST_ASIO_HAS_IO_URING $(BOOST_FLAGS) -o $(FILE_READER_TARGET) example_file_reader.cpp async_file_reader.cpp -luring
+	$(CXX) -DBOOST_ASIO_HAS_IO_URING $(BOOST_FLAGS) -o $(FILE_READER_TARGET) example_file_reader.cpp async_file_reader.cpp -luring -lssl -lcrypto
 
 $(RUST_LIB): rust-lib
 
