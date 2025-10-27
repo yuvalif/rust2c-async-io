@@ -5,3 +5,4 @@ example_boost_coro
 example_c
 example_cpp
 example_file_reader
+*.o

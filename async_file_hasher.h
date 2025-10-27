@@ -55,6 +55,36 @@ void free_runtime(RuntimeHandle* runtime_handle);
  */
 void calculate_md5_hash_c(RuntimeHandle* runtime_handle, const char* file_path, async_callback_t callback, void* user_data);
 
+/**
+ * Opaque MD5 context handle for incremental hashing
+ */
+typedef struct Md5Context Md5Context;
+
+/**
+ * Initialize a new MD5 context for incremental hashing
+ * @return MD5 context handle, or NULL on failure
+ * @note The returned context must be freed with md5_hash_finalize
+ */
+Md5Context* md5_hash_init(void);
+
+/**
+ * Update MD5 context with new data
+ * @param ctx MD5 context handle
+ * @param data Buffer containing data to hash
+ * @param len Length of data buffer
+ * @note This function is unsafe - ctx and data must be valid pointers
+ */
+void md5_hash_update(Md5Context* ctx, const unsigned char* data, size_t len);
+
+/**
+ * Finalize MD5 hash and get result
+ * @param ctx MD5 context handle (will be freed by this function)
+ * @return MD5 hash as a string (must be freed with free_string), or NULL on error
+ * @note This function is unsafe - ctx must be a valid pointer
+ * @note The context is consumed and freed by this function
+ */
+char* md5_hash_finalize(Md5Context* ctx);
+
 #ifdef __cplusplus
 }
 #endif

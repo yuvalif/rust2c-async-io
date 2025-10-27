@@ -148,7 +148,6 @@ pub unsafe extern "C" fn calculate_md5_hash_c(
         }
     };
 
-    //let callback_fn = callback;
     let user_data_ptr = user_data as usize; // Convert to usize for Send
 
     // Spawn the async task on the Tokio runtime
@@ -166,5 +165,58 @@ pub unsafe extern "C" fn calculate_md5_hash_c(
         let user_data_restored = user_data_ptr as *mut std::ffi::c_void;
         callback(hash_ptr, user_data_restored);
     });
+}
+
+// Opaque handle for MD5 context
+pub struct Md5Context {
+    context: md5::Context,
+}
+
+/// Creates a new MD5 context and returns an opaque handle
+/// # Safety
+/// The caller must call md5_hash_finalize to free the returned context
+#[no_mangle]
+pub extern "C" fn md5_hash_init() -> *mut Md5Context {
+    let context = md5::Context::new();
+    let md5_ctx = Md5Context { context };
+    Box::into_raw(Box::new(md5_ctx))
+}
+
+/// Updates the MD5 context with new data
+/// # Safety
+/// The caller must ensure that:
+/// - `ctx` is a valid pointer returned by md5_hash_init
+/// - `data` points to a valid buffer of at least `len` bytes
+#[no_mangle]
+pub unsafe extern "C" fn md5_hash_update(ctx: *mut Md5Context, data: *const u8, len: usize) {
+    if ctx.is_null() || data.is_null() {
+        return;
+    }
+    
+    let md5_ctx = &mut *ctx;
+    let buffer = std::slice::from_raw_parts(data, len);
+    md5_ctx.context.consume(buffer);
+}
+
+/// Finalizes the MD5 hash and returns the result as a hex string
+/// This function consumes the context and frees its memory
+/// # Safety
+/// The caller must ensure that:
+/// - `ctx` is a valid pointer returned by md5_hash_init
+/// - The returned string must be freed with free_string
+#[no_mangle]
+pub unsafe extern "C" fn md5_hash_finalize(ctx: *mut Md5Context) -> *mut c_char {
+    if ctx.is_null() {
+        return std::ptr::null_mut();
+    }
+    
+    let md5_ctx = Box::from_raw(ctx);
+    let digest = md5_ctx.context.compute();
+    let hash_string = format!("{digest:x}");
+    
+    match CString::new(hash_string) {
+        Ok(c_string) => c_string.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
