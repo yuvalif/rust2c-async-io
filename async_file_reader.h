@@ -4,7 +4,9 @@
 #include <boost/asio/spawn.hpp>
 #include <string>
 
+void read_file_chunks(const boost::asio::yield_context& yield,
+    boost::asio::io_context& io_context,
+    const std::string& filename,
+    void (*chunk_callback)(const char*, size_t, void* user_date),
+    void* user_date=nullptr);
 
-#include <functional>
-
-void read_file_chunks(boost::asio::yield_context yield, boost::asio::io_context& io_context, const std::string& filename, std::function<void(const char*, size_t, size_t, size_t)> chunk_callback);

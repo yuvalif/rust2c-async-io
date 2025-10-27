@@ -5,32 +5,33 @@
 
 constexpr size_t CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
 
-namespace asio = boost::asio;
-
-void read_file_chunks(asio::yield_context yield, asio::io_context& io_context, const std::string& filename, std::function<void(const char*, size_t, size_t, size_t)> chunk_callback) {
+void read_file_chunks(const boost::asio::yield_context& yield,
+    boost::asio::io_context& io_context,
+    const std::string& filename,
+    void (*chunk_callback)(const char*, size_t, void* user_date),
+    void* user_date) {
   try {
-    asio::random_access_file file(io_context, filename, asio::file_base::read_only);
+    boost::asio::random_access_file file(io_context, filename, boost::asio::file_base::read_only);
     std::vector<char> buffer(CHUNK_SIZE);
     size_t offset = 0;
-    size_t chunk_number = 0;
     boost::system::error_code ec;
 
     while (true) {
       const size_t bytes_read = file.async_read_some_at(
           offset, 
-          asio::buffer(buffer), 
+          boost::asio::buffer(buffer), 
           yield[ec]
           );
       if (ec) {
-        if (ec != asio::error::eof) std::cerr << "Error reading file " << filename << ": " << ec.message() << std::endl;
+        if (ec != boost::asio::error::eof) std::cerr << "Error reading file " << filename << ": " << ec.message() << std::endl;
         break;
       }
       if (bytes_read == 0) {
         break;
       }
       
-      // Call the callback with buffer data, chunk number, offset, and bytes read
-      chunk_callback(buffer.data(), chunk_number++, offset, bytes_read);
+      // Call the callback with buffer data, bytes read and user data
+      chunk_callback(buffer.data(), bytes_read, user_date);
       
       offset += bytes_read;
       if (bytes_read < CHUNK_SIZE) {
