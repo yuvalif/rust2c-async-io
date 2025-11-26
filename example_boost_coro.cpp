@@ -11,62 +11,40 @@
 
 using namespace boost::asio;
 
+using signature = void(boost::system::error_code, std::string);
+
 // Context for async operations
 struct AsyncContext {
-  io_context* io;
-  std::string hash;
-  bool error = true;
-  bool completed = false;
-  std::function<void()> resume_coro;
+  any_completion_handler<signature> handler;
 };
 
 // Coroutine to process a single file
-void process_file_coro(io_context& io, RuntimeHandle* runtime, const std::string& filename, yield_context yield) {
-  auto ctx = std::make_shared<AsyncContext>();
-  ctx->io = &io;
+template <completion_token_for<signature> CompletionToken>
+auto async_process_file_coro(RuntimeHandle* runtime, const std::string& filename, CompletionToken&& token) {
+  return async_initiate<CompletionToken, signature>(
+    [] (auto h, RuntimeHandle* runtime, const std::string& filename) {
+      auto ctx = new AsyncContext{std::move(h)};
 
-  // Set up the resume function
-  ctx->resume_coro = [ctx, yield]() mutable {
-    // Post to the io_context to resume the coroutine on the correct thread
-    ctx->io->post([ctx]() {
-        // This will effectively resume the suspended coroutine
-        ctx->completed = true;
-      });
-  };
+      // Call the async Rust function
+      calculate_md5_hash_c(
+          runtime,
+          filename.c_str(),
+          [](char* hash, void* user_data) {
+            auto* ctx = static_cast<AsyncContext*>(user_data);
 
-  // Call the async Rust function
-  calculate_md5_hash_c(
-      runtime,
-      filename.c_str(),
-      [](char* hash, void* user_data) {
-        auto* ctx = static_cast<AsyncContext*>(user_data);
+            std::string result;
+            if (hash != nullptr) {
+              result = std::string(hash);
+              free_string(hash);
+            }
 
-        if (hash != nullptr) {
-          ctx->hash = std::string(hash);
-          ctx->error = false;
-          free_string(hash);
-        }
+            auto handler = std::move(ctx->handler);
+            delete ctx;
 
-        // Resume the coroutine by posting to the io_context
-        ctx->io->post([ctx]() {
-          ctx->completed = true;
-        });
-    },
-    ctx.get()
-  );
-
-  // Wait for the async operation to complete
-  while (!ctx->completed) {
-    // Yield control back to the io_context
-    post(io, yield);
-  }
-
-  // Print the result
-  if (ctx->error) {
-    std::cout << filename << ": ERROR" << std::endl;
-  } else {
-    std::cout << filename << ": " << ctx->hash << std::endl;
-  }
+            boost::system::error_code ec;
+            dispatch(append(std::move(handler), ec, std::move(hash)));
+          }, ctx);
+    }, token, runtime, filename);
 }
 
 int main(int argc, char* argv[]) {
@@ -97,9 +75,16 @@ int main(int argc, char* argv[]) {
   for (const auto& file : files) {
     spawn(io,
         [&io, runtime, file](yield_context yield) {
-          process_file_coro(io, runtime, file, yield);
-      }
-    );
+          boost::system::error_code ec;
+          std::string hash = async_process_file_coro(runtime, file, yield[ec]);
+          // Print the result
+          if (ec) {
+            std::cout << file << ": ERROR " << ec << std::endl;
+          } else {
+            std::cout << file << ": " << hash << std::endl;
+          }
+        }
+      );
   }
 
   // Run the event loop
