@@ -42,7 +42,7 @@ auto async_process_file_coro(RuntimeHandle* runtime, const std::string& filename
             delete ctx;
 
             boost::system::error_code ec;
-            dispatch(append(std::move(handler), ec, std::move(hash)));
+            dispatch(append(std::move(handler), ec, std::move(result)));
           }, ctx);
     }, token, runtime, filename);
 }
@@ -70,14 +70,19 @@ int main(int argc, char* argv[]) {
   auto start = std::chrono::high_resolution_clock::now();
 
   io_context io;
+  auto work_guard = boost::asio::make_work_guard(io);
+  std::atomic<size_t> work_count{files.size()};
 
   // Spawn coroutines for each file
   for (const auto& file : files) {
     spawn(io,
-        [&io, runtime, file](yield_context yield) {
+        [&io, runtime, file, &work_count, &work_guard](yield_context yield) {
           boost::system::error_code ec;
           std::string hash = async_process_file_coro(runtime, file, yield[ec]);
           // Print the result
+          if (--work_count == 0) {
+            work_guard.reset();
+          } 
           if (ec) {
             std::cout << file << ": ERROR " << ec << std::endl;
           } else {
