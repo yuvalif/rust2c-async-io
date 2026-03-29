@@ -3,19 +3,23 @@
 #include <string>
 #include <chrono>
 #include <future>
+#include <thread>
 #include "async_file_hasher.h"
 
 // Function to process a single file
 std::string process_file_async(const std::string& filename) {
     char* hash = calculate_md5_hash_sync_c(filename.c_str());
 
+    std::stringstream ss;
+    ss << "[thread " << std::this_thread::get_id() << "] " << filename << ": ";
+
     if (hash != nullptr) {
-        std::string result = filename + ": " + std::string(hash);
-        free_string(hash);
-        return result;
+      ss  << hash;
+      free_string(hash);
     } else {
-        return filename + ": ERROR";
+      ss << "ERROR"; 
     }
+    return ss.str();
 }
 
 int main(int argc, char* argv[]) {

@@ -1,18 +1,19 @@
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -Wextra -std=c11
-CXXFLAGS = -Wall -Wextra -std=c++20
+CFLAGS = -Wall -Wextra -std=c11 -O2
+CXXFLAGS = -Wall -Wextra -std=c++20 -O2
 BOOST_FLAGS = $(CXXFLAGS) -lboost_context -lboost_coroutine
 C_TARGET = example_c
 CPP_TARGET = example_cpp
 ASYNC_TARGET = example_async
 BOOST_TARGET = example_boost_coro
+STATIC_BOOST_TARGET = example_boost_coro_static
 FILE_READER_TARGET = example_file_reader
 RUST_LIB = libasync_file_hasher.so
 
 .PHONY: all clean rust-lib
 
-all: rust-lib $(C_TARGET) $(CPP_TARGET) $(ASYNC_TARGET) $(BOOST_TARGET) $(FILE_READER_TARGET)
+all: rust-lib $(C_TARGET) $(CPP_TARGET) $(ASYNC_TARGET) $(BOOST_TARGET) $(STATIC_BOOST_TARGET) $(FILE_READER_TARGET)
 
 rust-lib:
 	cargo build --release
@@ -24,10 +25,13 @@ $(CPP_TARGET): example.cpp $(RUST_LIB)
 	$(CXX) $(CXXFLAGS) -o $(CPP_TARGET) example.cpp -L./target/release -lasync_file_hasher
 
 $(ASYNC_TARGET): example_async.cpp $(RUST_LIB)
-	$(CXX) $(CXXFLAGS) -o $(ASYNC_TARGET) example_async.cpp -L./target/release -lasync_file_hasher
+	$(CXX) $(CXXFLAGS) -o $(ASYNC_TARGET) example_async.cpp -L./target/release -lasync_file_hasher -lpthread
 
 $(BOOST_TARGET): example_boost_coro.cpp $(RUST_LIB)
 	$(CXX) $(BOOST_FLAGS) -o $(BOOST_TARGET) example_boost_coro.cpp -L./target/release -lasync_file_hasher
+
+$(STATIC_BOOST_TARGET): example_boost_coro.cpp $(RUST_LIB)
+	$(CXX) $(BOOST_FLAGS) -DSTATIC_TOKIO -o $(STATIC_BOOST_TARGET) example_boost_coro.cpp -L./target/release -lasync_file_hasher
 
 $(FILE_READER_TARGET): example_file_reader.cpp async_file_reader.cpp async_file_reader.h
 	$(CXX) -DBOOST_ASIO_HAS_IO_URING $(BOOST_FLAGS) -o $(FILE_READER_TARGET) example_file_reader.cpp async_file_reader.cpp -luring -lssl -lcrypto
@@ -35,6 +39,6 @@ $(FILE_READER_TARGET): example_file_reader.cpp async_file_reader.cpp async_file_
 $(RUST_LIB): rust-lib
 
 clean:
-	rm -f $(C_TARGET) $(CPP_TARGET) $(ASYNC_TARGET) $(BOOST_TARGET)
+	rm -f $(C_TARGET) $(CPP_TARGET) $(ASYNC_TARGET) $(BOOST_TARGET) $(STATIC_BOOST_TARGET)
 	cargo clean
 

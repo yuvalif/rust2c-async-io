@@ -4,6 +4,7 @@
 #include <chrono>
 #include <memory>
 #include <utility>
+#include <thread>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/coroutine/attributes.hpp>
@@ -60,12 +61,17 @@ int main(int argc, char* argv[]) {
 
   std::cout << "\nProcessing " << files.size() << " files using Boost.Asio coroutines:" << std::endl;
 
+#ifndef STATIC_TOKIO
   // Create Tokio runtime
   RuntimeHandle* runtime = create_runtime();
   if (!runtime) {
     std::cerr << "Failed to create Tokio runtime" << std::endl;
     return 1;
   }
+#else
+  RuntimeHandle* runtime = nullptr;
+  std::cout << "(using static tokio runtime)" << std::endl;
+#endif
 
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -73,30 +79,48 @@ int main(int argc, char* argv[]) {
   auto work_guard = boost::asio::make_work_guard(io);
   std::atomic<size_t> work_count{files.size()};
 
+  // Start worker threads before spawning coroutines
+  const auto num_threads = std::min(static_cast<size_t>(std::thread::hardware_concurrency()), files.size());
+  std::vector<std::thread> threads;
+  for (unsigned i = 0; i < num_threads; ++i) {
+    threads.emplace_back([&io]() { io.run(); });
+  }
+
+  std::map<std::string, std::string> results;
+
   // Spawn coroutines for each file
   for (const auto& file : files) {
     spawn(io,
-        [&io, runtime, file, &work_count, &work_guard](yield_context yield) {
+        [&io, runtime, file, &work_count, &work_guard, &results](yield_context yield) {
           boost::system::error_code ec;
           std::string hash = async_process_file_coro(runtime, file, yield[ec]);
           // Print the result
           if (--work_count == 0) {
             work_guard.reset();
-          } 
-          if (ec) {
-            std::cout << file << ": ERROR " << ec << std::endl;
-          } else {
-            std::cout << file << ": " << hash << std::endl;
           }
+          std::stringstream ss;
+          ss << "[thread " << std::this_thread::get_id() << "] " << file << ": ";
+          if (ec) {
+            ss << "ERROR: " << ec;
+          } else {
+            ss << hash;
+          }
+          results[file] = ss.str();
         }
       );
   }
 
-  // Run the event loop
-  io.run();
+  // Wait for all threads to finish
+  for (auto& t : threads) {
+    t.join();
+  }
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+  for (const auto& result : results) {
+    std::cout << result.second << std::endl;
+  }
 
   std::cout << "Boost.Asio coroutine processing time: " << duration.count() / 1000.0 << " ms" << std::endl;
 

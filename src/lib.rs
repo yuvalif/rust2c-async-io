@@ -2,6 +2,7 @@ use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::Read;
 use std::os::raw::c_char;
+use std::sync::OnceLock;
 use tokio::fs::File as AsyncFile;
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Runtime;
@@ -94,6 +95,13 @@ pub struct RuntimeHandle {
 // Callback type for async operations
 type AsyncCallback = extern "C" fn(*mut c_char, *mut std::ffi::c_void);
 
+/// Global Runtime to handle async operations when tokio runtime is not explicitly created
+static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub(crate) fn get_runtime() -> &'static tokio::runtime::Runtime {
+    RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().expect("Failed to create tokio runtime"))
+}
+
 #[no_mangle]
 pub extern "C" fn create_runtime() -> *mut RuntimeHandle {
     match Runtime::new() {
@@ -121,7 +129,7 @@ pub unsafe extern "C" fn free_runtime(runtime_handle: *mut RuntimeHandle) {
 ///
 /// This function is unsafe because it dereferences raw pointers.
 /// The caller must ensure that:
-/// - `runtime_handle` is a valid pointer returned by `create_runtime`
+/// - `runtime_handle` is a valid pointer returned by `create_runtime` or NULL
 /// - `file_path` is a valid, null-terminated string pointer
 /// - `callback` is a valid function pointer
 /// - `user_data` can be safely passed to the callback
@@ -132,12 +140,16 @@ pub unsafe extern "C" fn calculate_md5_hash_c(
     callback: AsyncCallback,
     user_data: *mut std::ffi::c_void,
 ) {
-    if runtime_handle.is_null() || file_path.is_null() {
+    let runtime = if runtime_handle.is_null() {
+        get_runtime()
+    } else {
+        &(*runtime_handle).runtime
+    };
+
+    if file_path.is_null() {
         callback(std::ptr::null_mut(), user_data);
         return;
     }
-
-    let runtime = &(*runtime_handle).runtime;
 
     let c_str = CStr::from_ptr(file_path);
     let file_path_str = match c_str.to_str() {
